@@ -1,14 +1,15 @@
 import asyncio
 from datetime import datetime
-import pprint
 from sys import exit
-from time import time
+
 import requests
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi_utils.tasks import repeat_every
 from httpx import AsyncClient
 from pyngrok import ngrok
-from fastapi_utils.tasks import repeat_every
+
+from PostgreSQL_DB import DB
 from DB_SQLAlchemy import my_DB
 from validations import MessageBodyModel, ResponseToMessage
 
@@ -24,7 +25,13 @@ TIMER = 30
 
 
 app = FastAPI()
+
+
+# DB_SQLAlchemy
 db = my_DB()
+
+# PostgreSQL_DB
+# db = DB()
 
 if TOKEN == "":
     exit("No secret found, exiting now!")
