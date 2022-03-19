@@ -20,24 +20,24 @@ HOST_URL = None
 LAST_MESSAGE = "/start"
 TM = datetime.now().minute
 TIMER = 30
+ACTIONS = ["/start", "/menu", "/add", "/delete", "/show"]
 
 # https://github.com/FarukOzderim/Telegram-Bot-Python-FastAPI
 
 
 app = FastAPI()
 
-
 # DB_SQLAlchemy
-db = my_DB()
+# db = my_DB()
 
 # PostgreSQL_DB
-# db = DB()
+db = DB()
 
 if TOKEN == "":
     exit("No secret found, exiting now!")
 
 
-def gather_tasks(res):
+def gather_tasks_sqlite(res):
     s = ""
     for x in res:
         s = s + f"№{x.number}: {x.task} " \
@@ -47,50 +47,71 @@ def gather_tasks(res):
     return d
 
 
+def gather_tasks_postgres(res):
+    if res:
+        s = ""
+        for x in res:
+            s = s + f"№{x[0]}: {x[1]} " \
+                    f"\n{x[2][:19]} \n\n"
+        d = {"text": f"{s}",
+             "chat_id": 427305163}
+    else:
+        d = {"text": "Извините, но список пуст!",
+             "chat_id": 427305163}
+    return d
+
+
 @app.on_event("startup")
 @repeat_every(seconds=TIMER)
 async def show_again():
     try:
         res = await db.get_from_db()
         if res:
-            my_dict = gather_tasks(res)
+            my_dict = gather_tasks_postgres(res)
             requests.post(TELEGRAM_SEND_MESSAGE_URL, json=my_dict)
     except Exception as e:
         print(e)
 
 
 @app.post("/webhook/{TOKEN}")
-async def post_process_telegram_update(message: MessageBodyModel, request: Request):
+async def post_process_telegram_update(message: MessageBodyModel):
     """Чуть чуть адаптированная функция"""
     global LAST_MESSAGE
     try:
         my_dict = None
+        mes = None
         mes = message.message.text
         if mes.startswith("/"):
-            if mes == "/add":
-                my_dict = {"text": "Пожалуйста напишите что вы собираетесь сделать",
-                           "chat_id": message.message.chat.id}
+            if mes in ACTIONS:
+                if mes == "/add":
+                    my_dict = {"text": "Пожалуйста, напишите что вы собираетесь сделать:",
+                               "chat_id": message.message.chat.id}
 
-            elif mes == "/delete":
-                my_dict = {"text": "Пожалуйста напишите что вы уже сделали",
-                           "chat_id": message.message.chat.id}
+                elif mes == "/delete":
+                    my_dict = {"text": "Пожалуйста, напишите что вы уже сделали:",
+                               "chat_id": message.message.chat.id}
 
-            elif mes == "/show":
-                res = await db.get_from_db()
-                my_dict = gather_tasks(res)
+                elif mes == "/show":
+                    res = await db.get_from_db()
+                    my_dict = gather_tasks_postgres(res)
 
-            elif mes == "/start":
-                my_dict = {"text": "Добрый день!",
-                           "chat_id": message.message.chat.id}
+                elif mes == "/start":
+                    my_dict = {"text": "Добрый день!",
+                               "chat_id": message.message.chat.id}
 
-            # elif mes == "/timer":
-            #     my_dict = {"text": "Какой таймер вы хотите поставить?",
-            #                "chat_id": message.message.chat.id}
+                # elif mes == "/timer":
+                #     my_dict = {"text": "Какой таймер вы хотите поставить?",
+                #                "chat_id": message.message.chat.id}
 
-            elif mes == "/menu":
-                my_dict = {
-                    "text": "/add : Добавить новое задание\n/delete : Стереть задание\n/show : Показать весь cписок",
-                    "chat_id": message.message.chat.id}
+                elif mes == "/menu":
+                    my_dict = {
+                        "text": "/add : Добавить новое задание\n"
+                                "/delete : Стереть задание\n"
+                                "/show : Показать весь cписок",
+                        "chat_id": message.message.chat.id}
+
+            else:
+                raise Exception
 
         elif LAST_MESSAGE.startswith("/"):
             if LAST_MESSAGE == "/add":
@@ -104,7 +125,6 @@ async def post_process_telegram_update(message: MessageBodyModel, request: Reque
                 my_dict = {"text": "Удалено!", "chat_id": message.message.chat.id}
                 await db.update_num()
 
-
             # elif LAST_MESSAGE == "/timer":
             #     try:
             #         TIMER = int(mes)
@@ -113,17 +133,14 @@ async def post_process_telegram_update(message: MessageBodyModel, request: Reque
             #     except:
             #         raise Exception
 
-        if my_dict is None:
-            raise Exception
-
-
     except Exception as e:
         print(e)
-        my_dict = {"text": "Извините, но вы что-то не так ввели!", "chat_id": message.message.chat.id}
+        my_dict = {"text": "Извините, но вы что-то не так ввели!", "chat_id": 427305163}
 
     finally:
         js = ResponseToMessage(**my_dict)
-        LAST_MESSAGE = mes
+        if mes:
+            LAST_MESSAGE = mes
         return js
 
 
